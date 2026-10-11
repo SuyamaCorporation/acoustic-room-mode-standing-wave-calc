@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acoustic Room Mode & Standing Wave Calculator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold text-gray-900 mb-1">Acoustic Room Mode & Standing Wave Calculator</h1>
+  <p class="text-sm text-gray-500 mb-6">Calculate axial, tangential, and oblique room modes to identify bass trap problem frequencies.</p>
+
+  <div class="bg-white rounded-xl shadow p-6 mb-6">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="length">Length (m)</label>
+        <input id="length" type="number" value="5.2" step="0.1" min="0.5" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="width">Width (m)</label>
+        <input id="width" type="number" value="3.8" step="0.1" min="0.5" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="height">Height (m)</label>
+        <input id="height" type="number" value="2.6" step="0.1" min="0.5" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="speedSound">Speed of Sound (m/s)</label>
+        <input id="speedSound" type="number" value="343" step="1" min="300" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+    </div>
+    <button onclick="calculate()" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">Calculate Room Modes</button>
+  </div>
+
+  <div id="results" class="hidden">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6" id="summaryCards"></div>
+
+    <div class="bg-white rounded-xl shadow p-4 mb-6">
+      <h2 class="text-base font-semibold text-gray-800 mb-3">Mode Density (0–500 Hz)</h2>
+      <canvas id="modeChart" height="120" class="w-full rounded"></canvas>
+    </div>
+
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-800">Top 30 Room Modes</h2>
+        <span class="text-xs text-red-600 font-medium">Red = below 300 Hz (bass trap area)</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm" id="modeTable"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function calculate() {
+  const L = parseFloat(document.getElementById('length').value) || 5.2;
+  const W = parseFloat(document.getElementById('width').value) || 3.8;
+  const H = parseFloat(document.getElementById('height').value) || 2.6;
+  const c = parseFloat(document.getElementById('speedSound').value) || 343;
+
+  const modes = [];
+
+  // Axial modes (one dimension varies, others zero)
+  for (let n = 1; n <= 8; n++) {
+    modes.push({ type: 'Axial', dim: 'L', n: `${n},0,0`, freq: n * c / (2 * L) });
+    modes.push({ type: 'Axial', dim: 'W', n: `0,${n},0`, freq: n * c / (2 * W) });
+    modes.push({ type: 'Axial', dim: 'H', n: `0,0,${n}`, freq: n * c / (2 * H) });
+  }
+
+  // Tangential modes (two dimensions vary)
+  for (let p = 1; p <= 4; p++) {
+    for (let q = 1; q <= 4; q++) {
+      modes.push({ type: 'Tangential', dim: 'L-W', n: `${p},${q},0`, freq: (c/2) * Math.sqrt((p/L)**2 + (q/W)**2) });
+      modes.push({ type: 'Tangential', dim: 'L-H', n: `${p},0,${q}`, freq: (c/2) * Math.sqrt((p/L)**2 + (q/H)**2) });
+      modes.push({ type: 'Tangential', dim: 'W-H', n: `0,${p},${q}`, freq: (c/2) * Math.sqrt((p/W)**2 + (q/H)**2) });
+    }
+  }
+
+  // Oblique modes (all three dimensions vary)
+  for (let p = 1; p <= 3; p++) {
+    for (let q = 1; q <= 3; q++) {
+      for (let r = 1; r <= 3; r++) {
+        modes.push({ type: 'Oblique', dim: 'L-W-H', n: `${p},${q},${r}`, freq: (c/2) * Math.sqrt((p/L)**2 + (q/W)**2 + (r/H)**2) });
+      }
+    }
+  }
+
+  // Sort by frequency, take top 30
+  modes.sort((a, b) => a.freq - b.freq);
+  const top30 = modes.slice(0, 30);
+
+  // Summary
+  const below300 = modes.filter(m => m.freq < 300).length;
+  const axialCount = top30.filter(m => m.type === 'Axial').length;
+  const f1L = (c / (2 * L)).toFixed(1);
+  const f1W = (c / (2 * W)).toFixed(1);
+  const f1H = (c / (2 * H)).toFixed(1);
+
+  const cards = [
+    { label: 'Modes < 300 Hz', value: below300, color: 'bg-red-50 border-red-200 text-red-700' },
+    { label: '1st Axial (L)', value: f1L + ' Hz', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+    { label: '1st Axial (W)', value: f1W + ' Hz', color: 'bg-green-50 border-green-200 text-green-700' },
+    { label: '1st Axial (H)', value: f1H + ' Hz', color: 'bg-purple-50 border-purple-200 text-purple-700' },
+  ];
+  const cardsEl = document.getElementById('summaryCards');
+  cardsEl.innerHTML = '';
+  cards.forEach(c => {
+    const div = document.createElement('div');
+    div.className = `rounded-xl border p-4 ${c.color}`;
+    const lbl = document.createElement('div');
+    lbl.className = 'text-xs font-medium uppercase tracking-wide opacity-70';
+    lbl.textContent = c.label;
+    const val = document.createElement('div');
+    val.className = 'text-xl font-bold mt-1';
+    val.textContent = c.value;
+    div.appendChild(lbl);
+    div.appendChild(val);
+    cardsEl.appendChild(div);
+  });
+
+  // Canvas chart
+  const canvas = document.getElementById('modeChart');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth || 600;
+  canvas.height = 120;
+  const W2 = canvas.width, H2 = canvas.height;
+  ctx.clearRect(0, 0, W2, H2);
+  const freqMax = 500;
+  const bins = 50;
+  const binSize = freqMax / bins;
+  const counts = new Array(bins).fill(0);
+  modes.filter(m => m.freq <= freqMax).forEach(m => {
+    const b = Math.floor(m.freq / binSize);
+    if (b < bins) counts[b]++;
+  });
+  const maxCount = Math.max(...counts, 1);
+  const barW = W2 / bins;
+  counts.forEach((count, i) => {
+    const x = i * barW;
+    const barH = (count / maxCount) * (H2 - 25);
+    const freq = (i + 0.5) * binSize;
+    ctx.fillStyle = freq < 300 ? '#fca5a5' : '#93c5fd';
+    ctx.fillRect(x + 1, H2 - 20 - barH, barW - 2, barH);
+  });
+
+  // X axis labels
+  ctx.fillStyle = '#6b7280';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  [0,100,200,300,400,500].forEach(f => {
+    const x = (f / freqMax) * W2;
+    ctx.fillText(f + ' Hz', x, H2 - 4);
+  });
+  ctx.fillText('300 Hz threshold', (300 / freqMax) * W2, H2 - 14);
+
+  // Table
+  const tbl = document.getElementById('modeTable');
+  tbl.innerHTML = '';
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr class="bg-gray-50"><th class="text-left p-2 font-medium text-gray-600 text-xs">Type</th><th class="text-left p-2 font-medium text-gray-600 text-xs">Dimensions</th><th class="text-left p-2 font-medium text-gray-600 text-xs">Mode (p,q,r)</th><th class="text-right p-2 font-medium text-gray-600 text-xs">Frequency (Hz)</th><th class="text-left p-2 font-medium text-gray-600 text-xs">Note</th></tr>';
+  tbl.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  top30.forEach((m, i) => {
+    const isProblem = m.freq < 300;
+    const tr = document.createElement('tr');
+    tr.className = isProblem ? 'bg-red-50' : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50');
+    const cells = [m.type, m.dim, m.n, m.freq.toFixed(1), isProblem ? 'Bass trap area' : ''];
+    const aligns = ['text-left','text-left','text-left','text-right','text-left'];
+    cells.forEach((c, ci) => {
+      const td = document.createElement('td');
+      td.className = `p-2 text-xs ${aligns[ci]} ${isProblem && ci === 3 ? 'font-bold text-red-700' : 'text-gray-700'}`;
+      td.textContent = c;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+  document.getElementById('results').classList.remove('hidden');
+}
+
+calculate();
+</script>
+</body>
+</html>

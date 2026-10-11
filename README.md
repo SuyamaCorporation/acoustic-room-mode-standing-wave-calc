@@ -1,0 +1,3 @@
+# Acoustic Room Mode & Standing Wave Calculator
+
+部屋の縦横高さからAxial/Tangential/Oblique定在波周波数を計算し問題周波数を可視化する音響設計ツール。300Hz以下のバストラップ問題周波数を赤ハイライトで表示し、モード密度を周波数軸のバーチャートで可視化する。上位30モードを周波数順のテーブルで確認できる。
